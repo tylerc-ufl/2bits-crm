@@ -109,6 +109,42 @@ export interface Campaign {
   createdAt: string;
 }
 
+export type AutomationTriggerType = 'status_changed' | 'deliverable_created';
+export type AutomationActionType = 'notify_assignee' | 'notify_team' | 'auto_assign';
+
+export interface AutomationTriggerConfig {
+  toStatus?: DeliverableStatus;
+}
+
+export interface AutomationActionConfig {
+  assigneeId?: string;
+}
+
+export interface AutomationRule {
+  id: string;
+  name: string;
+  enabled: boolean;
+  triggerType: AutomationTriggerType;
+  triggerConfig: AutomationTriggerConfig;
+  actionType: AutomationActionType;
+  actionConfig: AutomationActionConfig;
+  createdBy: string | null;
+  createdAt: string;
+}
+
+export interface AppNotification {
+  id: string;
+  userId: string;
+  actorName: string;
+  type: 'comment' | 'status_change';
+  deliverableId: string;
+  deliverableTitle: string;
+  deliverableType: 'video' | 'graphic' | 'copy' | 'photo';
+  message: string;
+  read: boolean;
+  createdAt: string;
+}
+
 export interface KPI {
   label: string;
   value: string | number;

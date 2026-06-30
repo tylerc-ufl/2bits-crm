@@ -160,6 +160,19 @@ export default function VideoReviewPage({ params }: { params: Promise<{ id: stri
     setNewCommentAt(null);
     await fetchComments();
     setSaving(false);
+
+    // Fire-and-forget notification
+    void fetch('/api/notifications', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'comment',
+        deliverable_id: id,
+        deliverable_title: deliverable.title,
+        deliverable_type: deliverable.type,
+        message: `${profile.name} commented on "${deliverable.title}"`,
+      }),
+    });
   }
 
   async function resolveCommentById(commentId: string) {

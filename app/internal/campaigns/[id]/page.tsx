@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import type { Database } from '@/lib/supabase/database.types';
 import { formatCurrency, formatDate, STATUS_CONFIG } from '@/lib/utils';
-import { ArrowLeft, TrendingUp, TrendingDown, Minus, FileVideo, Image as ImageIcon, FileText, Camera, Loader2, Upload } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown, Minus, FileVideo, Image as ImageIcon, FileText, Camera, Loader2, Upload, LayoutGrid, GanttChartSquare } from 'lucide-react';
 import type { Deliverable, DeliverableStatus, Campaign, KPI } from '@/lib/types';
 
 const COLUMNS: DeliverableStatus[] = ['todo', 'in_progress', 'in_review', 'approved', 'posted'];
@@ -78,6 +78,133 @@ function TrendIcon({ trend }: { trend?: string }) {
   return <Minus size={12} className="text-zinc-500" />;
 }
 
+// Extracts just the bg-* class from STATUS_CONFIG's combined color string
+function statusBg(color: string) {
+  return color.split(' ')[0];
+}
+
+function GanttView({ deliverables }: { deliverables: Deliverable[] }) {
+  if (deliverables.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-48 text-[#6B6B8A] text-sm border border-dashed border-[#1E1E2A] rounded-xl">
+        No deliverables yet
+      </div>
+    );
+  }
+
+  const dates = deliverables.flatMap((d) => [
+    new Date(d.createdAt).getTime(),
+    new Date(d.dueDate).getTime(),
+  ]);
+  const rangeStart = Math.min(...dates);
+  const rangeEnd = Math.max(...dates);
+  const totalMs = rangeEnd - rangeStart || 1;
+
+  // Build tick marks (weekly or daily depending on range)
+  const totalDays = Math.ceil(totalMs / 86400000);
+  const tickInterval = totalDays <= 14 ? 1 : totalDays <= 60 ? 7 : 14;
+  const ticks: Date[] = [];
+  const cursor = new Date(rangeStart);
+  cursor.setHours(0, 0, 0, 0);
+  while (cursor.getTime() <= rangeEnd) {
+    ticks.push(new Date(cursor));
+    cursor.setDate(cursor.getDate() + tickInterval);
+  }
+
+  function pct(ts: number) {
+    return Math.min(100, Math.max(0, ((ts - rangeStart) / totalMs) * 100));
+  }
+
+  const sorted = [...deliverables].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  );
+
+  return (
+    <div className="rounded-xl border border-[#1E1E2A] bg-[#13131A] overflow-hidden">
+      {/* Timeline header */}
+      <div className="flex border-b border-[#1E1E2A]">
+        <div className="w-56 flex-shrink-0 px-4 py-2 text-xs text-[#6B6B8A] font-medium border-r border-[#1E1E2A]">
+          Deliverable
+        </div>
+        <div className="flex-1 relative h-8 overflow-hidden">
+          {ticks.map((tick) => {
+            const left = pct(tick.getTime());
+            return (
+              <div
+                key={tick.toISOString()}
+                className="absolute top-0 h-full flex flex-col justify-end pb-1"
+                style={{ left: `${left}%` }}
+              >
+                <div className="h-2 border-l border-[#2D2D38]" />
+                <span className="text-[9px] text-[#6B6B8A] ml-1 whitespace-nowrap">
+                  {tick.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Rows */}
+      <div>
+        {sorted.map((del, i) => {
+          const cfg = STATUS_CONFIG[del.status];
+          const bg = statusBg(cfg.color);
+          const startPct = pct(new Date(del.createdAt).getTime());
+          const endPct = pct(new Date(del.dueDate).getTime());
+          const widthPct = Math.max(endPct - startPct, 0.5);
+          const reviewUrl =
+            del.type === 'video'
+              ? `/internal/review/video/${del.id}`
+              : `/internal/review/image/${del.id}`;
+
+          return (
+            <div
+              key={del.id}
+              className={`flex items-center group ${i % 2 === 1 ? 'bg-[#0A0A0F]' : ''}`}
+            >
+              {/* Label */}
+              <div className="w-56 flex-shrink-0 px-4 py-2.5 border-r border-[#1E1E2A] min-w-0">
+                <Link
+                  href={reviewUrl}
+                  className="text-xs font-medium text-[#F0F0F8] hover:text-[#E8FF47] truncate block transition-colors"
+                >
+                  {del.title}
+                </Link>
+                <span className={`inline-block mt-0.5 text-[9px] px-1.5 py-px rounded-full ${cfg.color}`}>
+                  {cfg.label}
+                </span>
+              </div>
+
+              {/* Bar track */}
+              <div className="flex-1 relative h-10 px-0">
+                {/* Grid lines */}
+                {ticks.map((tick) => (
+                  <div
+                    key={tick.toISOString()}
+                    className="absolute top-0 bottom-0 border-l border-[#1E1E2A]"
+                    style={{ left: `${pct(tick.getTime())}%` }}
+                  />
+                ))}
+                {/* Bar */}
+                <div
+                  className={`absolute top-1/2 -translate-y-1/2 h-5 rounded-full ${bg} opacity-80 group-hover:opacity-100 transition-opacity flex items-center px-2 overflow-hidden`}
+                  style={{ left: `${startPct}%`, width: `${widthPct}%` }}
+                  title={`${formatDate(del.createdAt)} → ${formatDate(del.dueDate)}`}
+                >
+                  <span className="text-[9px] font-medium text-white/80 truncate whitespace-nowrap">
+                    {del.title}
+                  </span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function CampaignDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
@@ -89,6 +216,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
   const [savingStatus, setSavingStatus] = useState(false);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [uploadAccept, setUploadAccept] = useState<string>('');
+  const [view, setView] = useState<'kanban' | 'gantt'>('kanban');
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const supabase = createClient();
@@ -195,6 +323,9 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
     if (!dragging || !campaign) return;
     setSavingStatus(true);
     setDragOver(null);
+
+    const droppedDel = campaign.deliverables.find((d) => d.id === dragging);
+
     const deliverablesClient = supabase.from('deliverables' as const) as any;
     const { error: updateError } = await deliverablesClient.update({ status }).eq('id', dragging);
     if (updateError) {
@@ -209,6 +340,34 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
           ),
         };
       });
+
+      // Fire-and-forget notification + automations
+      if (droppedDel && profile) {
+        const statusLabel = STATUS_CONFIG[status]?.label ?? status;
+        void fetch('/api/notifications', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'status_change',
+            deliverable_id: dragging,
+            deliverable_title: droppedDel.title,
+            deliverable_type: droppedDel.type,
+            message: `${profile.name} moved "${droppedDel.title}" to ${statusLabel}`,
+          }),
+        });
+        void fetch('/api/automations/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            trigger_type: 'status_changed',
+            deliverable_id: dragging,
+            deliverable_title: droppedDel.title,
+            deliverable_type: droppedDel.type,
+            assignee_id: droppedDel.assigneeId ?? null,
+            to_status: status,
+          }),
+        });
+      }
     }
     setSavingStatus(false);
     setDragging(null);
@@ -281,6 +440,33 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
         onChange={handleFileUpload}
       />
 
+      {/* View toggle */}
+      <div className="flex items-center gap-1 mb-4 p-1 rounded-lg bg-[#13131A] border border-[#1E1E2A] w-fit">
+        <button
+          onClick={() => setView('kanban')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+            view === 'kanban'
+              ? 'bg-[#E8FF47]/10 text-[#E8FF47]'
+              : 'text-[#6B6B8A] hover:text-[#F0F0F8]'
+          }`}
+        >
+          <LayoutGrid size={13} /> Kanban
+        </button>
+        <button
+          onClick={() => setView('gantt')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+            view === 'gantt'
+              ? 'bg-[#E8FF47]/10 text-[#E8FF47]'
+              : 'text-[#6B6B8A] hover:text-[#F0F0F8]'
+          }`}
+        >
+          <GanttChartSquare size={13} /> Gantt
+        </button>
+      </div>
+
+      {view === 'gantt' ? (
+        <GanttView deliverables={campaign.deliverables} />
+      ) : (
       <div className="flex gap-4 overflow-x-auto pb-4">
         {COLUMNS.map((status) => {
           const cfg = STATUS_CONFIG[status];
@@ -357,6 +543,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
           );
         })}
       </div>
+      )}
     </div>
   );
 }

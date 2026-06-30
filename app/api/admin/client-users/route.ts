@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
 
   const { error: insertError } = await adminClient
     .from('profiles')
-    .insert({
+    .upsert({
       id: userData.user.id,
       name,
       email,
