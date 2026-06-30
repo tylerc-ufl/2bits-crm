@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import type { Database } from '@/lib/supabase/database.types';
 import type { Comment } from '@/lib/types';
 import { formatTimestamp } from '@/lib/utils';
-import { ArrowLeft, Play, Pause, ThumbsUp, MessageSquare, Plus, Check } from 'lucide-react';
+import { ArrowLeft, Play, Pause, ThumbsUp, Plus, Check } from 'lucide-react';
 
 type CommentRow = Database['public']['Tables']['comments']['Row'];
 type CommentWithProfile = CommentRow & { profiles?: { name: string } };
@@ -46,9 +46,7 @@ export default function ClientVideoReviewPage({ params }: { params: Promise<{ id
   const [saving, setSaving] = useState(false);
   const [commentError, setCommentError] = useState<string | null>(null);
 
-  if (!deliverable) return <div className="p-8 text-[#6B6B8A]">Not found</div>;
-
-  async function fetchComments() {
+  const fetchComments = async () => {
     const { data, error } = await (supabase.from('comments' as const) as any)
       .select('*, profiles(name)')
       .eq('deliverable_id', id)
@@ -61,11 +59,13 @@ export default function ClientVideoReviewPage({ params }: { params: Promise<{ id
     } else {
       setComments((data ?? []).map(mapCommentRow));
     }
-  }
+  };
 
   useEffect(() => {
     void fetchComments();
-  }, [id, supabase]);
+  }, [id]);
+
+  if (!deliverable) return <div className="p-8 text-[#6B6B8A]">Not found</div>;
 
   const visibleComments = [...comments].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
 
@@ -128,6 +128,7 @@ export default function ClientVideoReviewPage({ params }: { params: Promise<{ id
 
   return (
     <div className="flex flex-col h-screen bg-[#0A0A0F]">
+      {/* Header */}
       <div className="flex items-center gap-4 px-6 py-4 border-b border-[#1E1E2A] flex-shrink-0">
         <button onClick={() => router.back()} className="text-[#6B6B8A] hover:text-[#F0F0F8] transition-colors">
           <ArrowLeft size={16} />
@@ -139,7 +140,7 @@ export default function ClientVideoReviewPage({ params }: { params: Promise<{ id
       </div>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Video */}
+        {/* Video panel */}
         <div className="flex-1 flex flex-col bg-black">
           <div className="flex-1 flex items-center justify-center">
             {deliverable.fileUrl ? (
@@ -155,34 +156,56 @@ export default function ClientVideoReviewPage({ params }: { params: Promise<{ id
               <div className="text-[#6B6B8A]">No video file</div>
             )}
           </div>
+
+          {/* Controls */}
           <div className="px-6 py-4 border-t border-[#1E1E2A]">
-            {/* Timeline */}
-            <div className="relative h-6 bg-[#1E1E2A] rounded-full mb-3 cursor-pointer"
+            {/* Timeline scrubber */}
+            <div
+              className="relative h-6 bg-[#1E1E2A] rounded-full mb-3 cursor-pointer"
               onClick={e => {
                 const rect = e.currentTarget.getBoundingClientRect();
                 const t = ((e.clientX - rect.left) / rect.width) * duration;
                 if (videoRef.current) { videoRef.current.currentTime = t; setCurrentTime(t); }
-              }}>
+              }}
+            >
               <div className="absolute left-0 top-0 h-full bg-[#E8FF47]/20 rounded-full" style={{ width: `${pct}%` }} />
               <div className="absolute top-0 h-full w-0.5 bg-[#E8FF47]" style={{ left: `${pct}%` }} />
               {visibleComments.filter(c => c.timestamp != null).map(c => (
-                <div key={c.id} title={`${formatTimestamp(c.timestamp || 0)} — ${c.body}`}
+                <div
+                  key={c.id}
+                  title={`${formatTimestamp(c.timestamp || 0)} — ${c.body}`}
                   className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-2.5 h-2.5 rounded-full border ${c.resolved ? 'border-emerald-400 bg-emerald-900' : 'border-[#E8FF47] bg-[#E8FF47]/30'}`}
                   style={{ left: `${duration > 0 ? ((c.timestamp || 0) / duration) * 100 : 0}%` }}
                 />
               ))}
             </div>
+
             <div className="flex items-center gap-4">
-              <button onClick={togglePlay} className="w-9 h-9 rounded-full bg-[#E8FF47] text-black flex items-center justify-center hover:bg-[#d4eb3a] transition-colors">
+              <button
+                onClick={togglePlay}
+                className="w-9 h-9 rounded-full bg-[#E8FF47] text-black flex items-center justify-center hover:bg-[#d4eb3a] transition-colors"
+              >
                 {playing ? <Pause size={16} /> : <Play size={16} />}
               </button>
-              <span className="text-xs text-[#6B6B8A] font-mono">{formatTimestamp(currentTime)} / {formatTimestamp(duration)}</span>
+              <span className="text-xs text-[#6B6B8A] font-mono">
+                {formatTimestamp(currentTime)} / {formatTimestamp(duration)}
+              </span>
               <div className="flex-1" />
-              <button onClick={() => { setShowInput(true); if (videoRef.current) { videoRef.current.pause(); setPlaying(false); } }}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[#1E1E2A] text-xs text-[#6B6B8A] hover:text-[#E8FF47] hover:border-[#E8FF47]/30 transition-colors">
+              <button
+                onClick={() => {
+                  setShowInput(true);
+                  if (videoRef.current) { videoRef.current.pause(); setPlaying(false); }
+                }}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[#1E1E2A] text-xs text-[#6B6B8A] hover:text-[#E8FF47] hover:border-[#E8FF47]/30 transition-colors"
+              >
                 <Plus size={12} /> Comment at {formatTimestamp(currentTime)}
               </button>
             </div>
+
+            {/* Error display */}
+            {commentError && (
+              <p className="mt-2 text-xs text-red-400">{commentError}</p>
+            )}
           </div>
         </div>
 
@@ -192,6 +215,7 @@ export default function ClientVideoReviewPage({ params }: { params: Promise<{ id
             <div className="font-semibold text-sm">Feedback</div>
           </div>
 
+          {/* Comment input */}
           {showInput && (
             <div className="p-4 border-b border-[#1E1E2A] bg-[#0A0A0F]">
               <div className="text-xs text-[#E8FF47] mb-2">at {formatTimestamp(currentTime)}</div>
@@ -199,35 +223,62 @@ export default function ClientVideoReviewPage({ params }: { params: Promise<{ id
                 autoFocus
                 value={commentText}
                 onChange={e => setCommentText(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submitComment(); }}
                 placeholder="Leave feedback or request a change…"
                 rows={3}
                 className="w-full bg-[#13131A] border border-[#1E1E2A] rounded-lg p-2.5 text-sm resize-none focus:outline-none focus:border-[#E8FF47]/50 placeholder:text-[#6B6B8A]"
               />
               <div className="flex gap-2 mt-2">
-                <button onClick={submitComment} disabled={!commentText.trim()} className="px-3 py-1.5 bg-[#E8FF47] text-black text-xs font-semibold rounded-lg disabled:opacity-40">Post</button>
-                <button onClick={() => { setShowInput(false); setCommentText(''); }} className="px-3 py-1.5 text-[#6B6B8A] text-xs">Cancel</button>
+                <button
+                  onClick={submitComment}
+                  disabled={!commentText.trim() || saving}
+                  className="px-3 py-1.5 bg-[#E8FF47] text-black text-xs font-semibold rounded-lg disabled:opacity-40"
+                >
+                  {saving ? 'Posting…' : 'Post'}
+                </button>
+                <button
+                  onClick={() => { setShowInput(false); setCommentText(''); }}
+                  className="px-3 py-1.5 text-[#6B6B8A] text-xs"
+                >
+                  Cancel
+                </button>
               </div>
             </div>
           )}
 
+          {/* Comment list */}
           <div className="flex-1 overflow-y-auto divide-y divide-[#1E1E2A]">
             {visibleComments.map(c => (
               <div key={c.id} className={`p-4 ${c.resolved ? 'opacity-50' : ''}`}>
                 <div className="flex items-center gap-2 mb-1.5">
                   <div className="w-6 h-6 rounded-full bg-[#E8FF47]/10 flex items-center justify-center flex-shrink-0">
-                    <span className="text-[#E8FF47] text-[9px] font-bold">{c.userName.split(' ').map(n => n[0]).join('')}</span>
+                    <span className="text-[#E8FF47] text-[9px] font-bold">
+                      {c.userName.split(' ').map((n: string) => n[0]).join('')}
+                    </span>
                   </div>
                   <span className="text-xs font-medium">{c.userName}</span>
                   {c.timestamp != null && (
-                    <button onClick={() => { if (videoRef.current) { videoRef.current.currentTime = c.timestamp!; setCurrentTime(c.timestamp!); } }}
-                      className="ml-auto text-[10px] text-[#E8FF47] font-mono bg-[#E8FF47]/10 px-1.5 py-0.5 rounded">
-                      {formatTimestamp(c.timestamp)}
+                    <button
+                      onClick={() => {
+                        if (videoRef.current) {
+                          videoRef.current.currentTime = c.timestamp!;
+                          setCurrentTime(c.timestamp!);
+                          videoRef.current.play();
+                          setPlaying(true);
+                        }
+                      }}
+                      className="ml-auto text-[10px] text-[#E8FF47] font-mono bg-[#E8FF47]/10 px-1.5 py-0.5 rounded hover:bg-[#E8FF47]/20 transition-colors"
+                    >
+                      ▶ {formatTimestamp(c.timestamp)}
                     </button>
                   )}
                 </div>
                 <p className="text-xs leading-relaxed">{c.body}</p>
-                {c.userId === profile?.id && !c.resolved && (
-                  <button onClick={() => resolveCommentById(c.id)} className="flex items-center gap-1 text-[10px] text-[#6B6B8A] hover:text-emerald-400 mt-1.5 transition-colors">
+                {!c.resolved && (
+                  <button
+                    onClick={() => resolveCommentById(c.id)}
+                    className="flex items-center gap-1 text-[10px] text-[#6B6B8A] hover:text-emerald-400 mt-1.5 transition-colors"
+                  >
                     <Check size={10} /> Mark resolved
                   </button>
                 )}
@@ -238,7 +289,7 @@ export default function ClientVideoReviewPage({ params }: { params: Promise<{ id
             )}
           </div>
 
-          {/* Approve button */}
+          {/* Approve */}
           <div className="p-4 border-t border-[#1E1E2A]">
             <button className="w-full py-3 bg-[#E8FF47] text-black font-bold text-sm rounded-xl hover:bg-[#d4eb3a] transition-colors flex items-center justify-center gap-2">
               <ThumbsUp size={16} /> Approve This Deliverable
